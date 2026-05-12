@@ -871,6 +871,111 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 
 /* ============================================================
+   CARD RELATIONSHIPS — parent/children & blocked-by indicators
+   ============================================================ */
+.card-relation {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-family: var(--mono);
+  font-weight: 500;
+  letter-spacing: .2px;
+  line-height: 1.3;
+  margin-top: -2px;
+}
+.card-relation.is-blocked {
+  color: var(--danger);
+  font-weight: 600;
+}
+.card-relation.parent {
+  color: var(--ink-faint);
+}
+.card-relation.children {
+  color: var(--accent);
+}
+.card-relation .rel-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.card-relation .rel-link:hover { text-decoration-style: solid; }
+
+/* Card-level "blocked" emphasis */
+.card.is-blocked {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent,
+    transparent 12px,
+    rgba(178, 58, 72, 0.04) 12px,
+    rgba(178, 58, 72, 0.04) 13px
+  );
+}
+
+/* Mini "child count" badge near the card ID */
+.card-children-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--surface-warm);
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* Dependency chips inside the card editor */
+.dep-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-warm);
+  border-radius: 12px;
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--ink);
+}
+.dep-chip .dep-x {
+  background: transparent;
+  border: none;
+  color: var(--ink-faint);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.dep-chip .dep-x:hover { color: var(--danger); }
+.dep-chip.unresolved { border-color: var(--danger); color: var(--danger); }
+.dep-add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+.dep-add-row select {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-warm);
+  font-size: 13px;
+}
+.dep-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.dep-empty {
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+/* ============================================================
    EMPTY STATE
    ============================================================ */
 .empty-state {
@@ -1635,6 +1740,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
         <h2>Resources</h2>
         <span class="count" id="links-count"></span>
         <div class="tag-filter-chips" id="link-tag-filters"></div>
+        <button class="btn" id="link-export-btn" title="Download a JSON backup of these links">⬇ Export</button>
         <button class="btn primary" id="link-add-btn">＋ Add link</button>
       </div>
       <div class="links-grid" id="links-grid"></div>
@@ -1700,6 +1806,20 @@ button:disabled { cursor: not-allowed; opacity: .5; }
         <div class="field">
           <label class="field-label">Due date</label>
           <input type="date" id="ce-due">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Parent card (optional)</label>
+        <select id="ce-parent"></select>
+        <p class="hint" id="ce-parent-hint" style="display:none;">This card has sub-cards; it cannot itself become a sub-card of another.</p>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Blocked by</label>
+        <div class="dep-list" id="ce-blockers"></div>
+        <div class="dep-add-row">
+          <select id="ce-blocker-pick"><option value="">＋ add a blocker…</option></select>
         </div>
       </div>
     </div>
@@ -1853,7 +1973,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 <div class="modal-overlay" id="confirm-modal">
   <div class="modal" style="width:min(420px, calc(100vw - 40px));">
     <div class="modal-header"><h2 id="cm-title">Confirm</h2></div>
-    <div class="modal-body"><p class="hint" id="cm-message" style="font-style:normal;color:var(--ink);font-size:14px;"></p></div>
+    <div class="modal-body"><p class="hint" id="cm-message" style="font-style:normal;color:var(--ink);font-size:14px;white-space:pre-wrap;line-height:1.5;"></p></div>
     <div class="modal-footer">
       <button class="btn ghost" data-close>Cancel</button>
       <button class="btn danger" id="cm-confirm">Confirm</button>
@@ -2103,6 +2223,8 @@ function migrateState(s) {
     if (p.filter.myCardsOnly === undefined) p.filter.myCardsOnly = false;
     (p.tasks || []).forEach(t => {
       if (t.archived === undefined) t.archived = false;
+      if (t.parentId === undefined) t.parentId = '';
+      if (!Array.isArray(t.blockedBy)) t.blockedBy = [];
     });
   });
 }
@@ -2205,6 +2327,60 @@ function defaultPriority() {
   const med = ps.find(p => p.toLowerCase() === 'medium');
   if (med) return med;
   return ps[Math.floor(ps.length / 2)];
+}
+
+/* ============================================================
+   CARD RELATIONSHIPS — parent/children & blocked-by
+   ============================================================ */
+function getTaskById(id) {
+  if (!id) return null;
+  return P().tasks.find(t => t.id === id) || null;
+}
+
+/** Direct children of a card (cards whose parentId === id). */
+function childrenOf(id) {
+  if (!id) return [];
+  return P().tasks.filter(t => t.parentId === id);
+}
+
+/** All descendants (children, grandchildren, …). Cycle-safe. */
+function descendantsOf(id) {
+  const out = [];
+  const seen = new Set();
+  const walk = (pid) => {
+    childrenOf(pid).forEach(c => {
+      if (seen.has(c.id)) return;
+      seen.add(c.id);
+      out.push(c);
+      walk(c.id);
+    });
+  };
+  walk(id);
+  return out;
+}
+
+/** Unresolved blockers of a card — cards in `blockedBy` that aren't in the
+ *  final status. Returns an array of {id, title, status} tuples. */
+function unresolvedBlockersOf(task) {
+  if (!task || !Array.isArray(task.blockedBy) || !task.blockedBy.length) return [];
+  const doneStatus = S().statuses[S().statuses.length - 1];
+  return task.blockedBy
+    .map(id => getTaskById(id))
+    .filter(t => t && t.status !== doneStatus)
+    .map(t => ({ id: t.id, title: t.title || '(untitled)', status: t.status }));
+}
+
+/** Is this card considered "blocked" right now? */
+function isBlocked(task) {
+  return unresolvedBlockersOf(task).length > 0;
+}
+
+/** Would setting `candidateParentId` as the parent of `childId` create a cycle?
+ *  True if candidate is the child itself or any of its descendants. */
+function wouldCreateCycle(childId, candidateParentId) {
+  if (!candidateParentId) return false;
+  if (childId === candidateParentId) return true;
+  return descendantsOf(childId).some(d => d.id === candidateParentId);
 }
 
 function debounce(fn, ms) {
@@ -2321,8 +2497,14 @@ function renderCard(task) {
   const urgency = urgencyOf(task);
   const prioColor = settings.priorityColors[task.priority] || '#ECE4D0';
 
+  // Relationships
+  const parent = task.parentId ? getTaskById(task.parentId) : null;
+  const children = childrenOf(task.id);
+  const unresolved = unresolvedBlockersOf(task);
+  const isBlock = unresolved.length > 0;
+
   const el = document.createElement('article');
-  el.className = 'card urgency-' + urgency;
+  el.className = 'card urgency-' + urgency + (isBlock ? ' is-blocked' : '');
   el.dataset.cardId = task.id;
   el.draggable = true;
   el.style.setProperty('--card-bg', prioColor);
@@ -2359,6 +2541,17 @@ function renderCard(task) {
   const descHtml = task.descriptionText && task.descriptionText.trim()
     ? `<div class="card-desc">${esc(task.descriptionText)}</div>` : '';
 
+  // Relationship lines
+  const parentLine = parent
+    ? `<div class="card-relation parent">└ subcard of <span class="rel-link" data-jump-to="${esc(parent.id)}">${esc(parent.id)} ${esc(parent.title || '')}</span></div>`
+    : '';
+  const childrenLine = children.length
+    ? `<div class="card-relation children">⤷ ${children.length} sub-card${children.length === 1 ? '' : 's'}</div>`
+    : '';
+  const blockedLine = isBlock
+    ? `<div class="card-relation is-blocked" title="Blocked by ${unresolved.map(u => u.id).join(', ')}">⛔ Blocked by ${unresolved.map(u => '<span class="rel-link" data-jump-to="' + esc(u.id) + '">' + esc(u.id) + '</span>').join(', ')}</div>`
+    : '';
+
   // First area's color → accent stripe across the top of the card
   const firstArea = (task.areas || [])[0];
   const accentColor = firstArea && settings.areaColors[firstArea];
@@ -2367,10 +2560,13 @@ function renderCard(task) {
   el.innerHTML = `
     ${accentColor ? '<div class="card-accent"></div>' : ''}
     <div class="card-top">
-      <span class="card-id">${esc(task.id)}</span>
+      <span class="card-id">${esc(task.id)}${children.length ? `<span class="card-children-badge">${children.length}</span>` : ''}</span>
       ${task.priority ? `<span class="card-priority" style="--prio-bg:${esc(prioColor)}; --prio-border:${esc(shade(prioColor,-15))};">${esc(task.priority)}</span>` : ''}
     </div>
     <h3 class="card-title">${esc(task.title || '(untitled)')}</h3>
+    ${parentLine}
+    ${childrenLine}
+    ${blockedLine}
     ${areasHtml ? `<div class="card-areas">${areasHtml}</div>` : ''}
     ${subcatHtml}
     ${descHtml}
@@ -2380,6 +2576,15 @@ function renderCard(task) {
       ${task.assignee ? `<span class="card-assignee">${esc(task.assignee)}</span>` : '<span></span>'}
     </div>
   `;
+
+  // Click on a relationship link → jump to that card's editor (don't open this card)
+  el.querySelectorAll('.rel-link').forEach(rl => {
+    rl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const target = rl.dataset.jumpTo;
+      if (target) openCardModal(target);
+    });
+  });
 
   el.addEventListener('click', (e) => {
     // Don't open editor if we just finished a drag
@@ -2447,16 +2652,40 @@ function setupDragDrop() {
       body.classList.remove('drag-over');
       if (!dragCardId) return;
       const newStatus = body.closest('.column').dataset.status;
-      const t = P().tasks.find(x => x.id === dragCardId);
-      if (t && t.status !== newStatus) {
-        t.status = newStatus;
-        t.updated = new Date().toISOString();
-        saveSoon();
-        renderBoard();
-        renderProjectPicker();
-      }
+      moveCardWithBlockerCheck(dragCardId, newStatus);
     });
   });
+}
+
+/** Change a card's status, warning the user if moving to Done while blocked. */
+function moveCardWithBlockerCheck(cardId, newStatus) {
+  const t = P().tasks.find(x => x.id === cardId);
+  if (!t || t.status === newStatus) return;
+  const doneStatus = S().statuses[S().statuses.length - 1];
+  const movingToDone = newStatus === doneStatus;
+  if (movingToDone) {
+    const unresolved = unresolvedBlockersOf(t);
+    if (unresolved.length) {
+      const list = unresolved.map(u => '• ' + u.id + ' — ' + u.title + ' (' + u.status + ')').join('\n');
+      openConfirm(
+        'Card ' + t.id + ' is still blocked',
+        unresolved.length + ' blocker' + (unresolved.length === 1 ? ' isn' : 's aren') + "'t Done yet:\n\n" + list +
+        "\n\nMark Done anyway?",
+        'Mark Done anyway',
+        () => { applyStatusChange(t, newStatus); }
+      );
+      return;
+    }
+  }
+  applyStatusChange(t, newStatus);
+}
+
+function applyStatusChange(task, newStatus) {
+  task.status = newStatus;
+  task.updated = new Date().toISOString();
+  saveSoon();
+  renderBoard();
+  renderProjectPicker();
 }
 
 /* ============================================================
@@ -2555,14 +2784,7 @@ function attachTouchDrag(card) {
     cleanup();
     if (body) {
       const newStatus = body.closest('.column').dataset.status;
-      const task = P().tasks.find(x => x.id === card.dataset.cardId);
-      if (task && task.status !== newStatus) {
-        task.status = newStatus;
-        task.updated = new Date().toISOString();
-        saveSoon();
-        renderBoard();
-        renderProjectPicker();
-      }
+      moveCardWithBlockerCheck(card.dataset.cardId, newStatus);
     }
     // Suppress the trailing click so it doesn't open the editor
     card.dataset.justDragged = '1';
@@ -2615,6 +2837,9 @@ function newDraftCard(defaults) {
     subtaskGroups: {},
     assignee: '',
     dueDate: '',
+    parentId: '',
+    blockedBy: [],
+    archived: false,
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     ...defaults
@@ -2781,6 +3006,89 @@ function renderCardEditor() {
   subtaskRoot.querySelectorAll('[data-add]').forEach(btn => {
     btn.onclick = () => addEmptySubtask(btn.dataset.add);
   });
+
+  // Parent picker
+  renderParentPicker();
+  // Blockers
+  renderBlockers();
+}
+
+/** Populate the Parent picker. Excludes self and own descendants (would cycle). */
+function renderParentPicker() {
+  const d = editingDraft;
+  const sel = document.getElementById('ce-parent');
+  const hint = document.getElementById('ce-parent-hint');
+  // If this card already has children, disallow assigning it a parent —
+  // multi-level hierarchies remain possible, but the user must pick the
+  // smallest unit as the leaf. This avoids confusing deep-tree UIs.
+  const hasKids = childrenOf(d.id).length > 0;
+  if (hasKids) {
+    sel.innerHTML = '<option value="">— this card has sub-cards —</option>';
+    sel.disabled = true;
+    hint.style.display = '';
+    return;
+  }
+  sel.disabled = false;
+  hint.style.display = 'none';
+
+  const candidates = P().tasks.filter(t => !wouldCreateCycle(d.id, t.id));
+  candidates.sort((a, b) => a.id.localeCompare(b.id));
+
+  const options = ['<option value="">(no parent)</option>']
+    .concat(candidates.map(t =>
+      `<option value="${esc(t.id)}" ${t.id === d.parentId ? 'selected' : ''}>${esc(t.id)} — ${esc(t.title || '(untitled)')}</option>`
+    ));
+  sel.innerHTML = options.join('');
+  sel.onchange = () => { d.parentId = sel.value || ''; };
+}
+
+/** Populate the Blockers list + the picker for adding more. */
+function renderBlockers() {
+  const d = editingDraft;
+  const list = document.getElementById('ce-blockers');
+  const pick = document.getElementById('ce-blocker-pick');
+  const doneStatus = S().statuses[S().statuses.length - 1];
+
+  d.blockedBy = (d.blockedBy || []).filter(id => id !== d.id);
+
+  if (!d.blockedBy.length) {
+    list.innerHTML = '<span class="dep-empty">No blockers — this card can move freely.</span>';
+  } else {
+    list.innerHTML = d.blockedBy.map(id => {
+      const t = getTaskById(id);
+      if (!t) {
+        return `<span class="dep-chip unresolved" title="Card not found">⚠ ${esc(id)} (missing)<button class="dep-x" data-rm="${esc(id)}" title="Remove">×</button></span>`;
+      }
+      const unresolved = t.status !== doneStatus;
+      return `<span class="dep-chip ${unresolved ? 'unresolved' : ''}" title="${esc(t.title)} — ${esc(t.status)}">
+                ${unresolved ? '⛔' : '✓'} ${esc(t.id)}
+                <button class="dep-x" data-rm="${esc(t.id)}" title="Remove">×</button>
+              </span>`;
+    }).join('');
+    list.querySelectorAll('[data-rm]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.rm;
+        d.blockedBy = d.blockedBy.filter(x => x !== id);
+        renderBlockers();
+      };
+    });
+  }
+
+  // Picker — exclude self, already-added, and own descendants (a descendant
+  // blocking its ancestor creates a logical deadlock).
+  const own = new Set([d.id, ...descendantsOf(d.id).map(t => t.id), ...(d.blockedBy || [])]);
+  const candidates = P().tasks.filter(t => !own.has(t.id));
+  candidates.sort((a, b) => a.id.localeCompare(b.id));
+  pick.innerHTML = '<option value="">＋ add a blocker…</option>' +
+    candidates.map(t => `<option value="${esc(t.id)}">${esc(t.id)} — ${esc(t.title || '(untitled)')}</option>`).join('');
+  pick.onchange = () => {
+    const id = pick.value;
+    if (!id) return;
+    d.blockedBy = d.blockedBy || [];
+    if (d.blockedBy.indexOf(id) === -1) d.blockedBy.push(id);
+    pick.value = '';
+    renderBlockers();
+  };
 }
 
 function addEmptySubtask(group) {
@@ -2821,6 +3129,32 @@ document.getElementById('ce-save').addEventListener('click', () => {
   }
   document.getElementById('ce-msg').textContent = '';
 
+  // Done-with-blockers warning. Only fires when moving INTO Done — not when
+  // already in Done and saving an unrelated edit.
+  const doneStatus = S().statuses[S().statuses.length - 1];
+  const original = editingCardId ? P().tasks.find(t => t.id === editingCardId) : null;
+  const wasAlreadyDone = original && original.status === doneStatus;
+  const movingToDone = d.status === doneStatus && !wasAlreadyDone;
+  if (movingToDone) {
+    const unresolved = unresolvedBlockersOf(d);
+    if (unresolved.length) {
+      const list = unresolved.map(u => '• ' + u.id + ' — ' + u.title + ' (' + u.status + ')').join('\n');
+      openConfirm(
+        'This card is still blocked',
+        unresolved.length + ' blocker' + (unresolved.length === 1 ? ' isn' : 's aren') + "'t Done yet:\n\n" + list +
+        "\n\nMark this card Done anyway?",
+        'Mark Done anyway',
+        () => commitCardSave(d)
+      );
+      return;
+    }
+  }
+  commitCardSave(d);
+});
+
+/** Actually persist the editing draft. Pulled out so the blocker-warning
+ *  confirm dialog can call it after the user opts in. */
+function commitCardSave(d) {
   if (editingCardId) {
     const i = P().tasks.findIndex(t => t.id === editingCardId);
     if (i !== -1) P().tasks[i] = d;
@@ -2831,15 +3165,29 @@ document.getElementById('ce-save').addEventListener('click', () => {
   renderBoard();
   renderProjectPicker();
   closeAllModals();
-});
+}
 
 document.getElementById('ce-delete').addEventListener('click', () => {
   if (!editingCardId) return;
+  const kids = childrenOf(editingCardId);
+  const dependents = P().tasks.filter(t => (t.blockedBy || []).indexOf(editingCardId) !== -1);
+  let warning = 'Card ' + editingCardId + ' will be permanently removed from "' + P().name + '".';
+  const extras = [];
+  if (kids.length) extras.push(kids.length + ' sub-card' + (kids.length === 1 ? '' : 's') + ' will become orphaned (lose their parent link, but the cards themselves remain).');
+  if (dependents.length) extras.push(dependents.length + ' card' + (dependents.length === 1 ? '' : 's') + ' currently blocked by it will have the dependency removed.');
+  if (extras.length) warning += '\n\n' + extras.join('\n');
   openConfirm(
     'Delete card?',
-    'Card ' + editingCardId + ' will be permanently removed from "' + P().name + '".',
+    warning,
     'Delete',
     () => {
+      // Cascade cleanup: clear references to this card from any other card
+      P().tasks.forEach(t => {
+        if (t.parentId === editingCardId) t.parentId = '';
+        if ((t.blockedBy || []).indexOf(editingCardId) !== -1) {
+          t.blockedBy = t.blockedBy.filter(id => id !== editingCardId);
+        }
+      });
       P().tasks = P().tasks.filter(t => t.id !== editingCardId);
       saveState();
       renderBoard();
@@ -2909,6 +3257,7 @@ document.getElementById('qa-save').addEventListener('click', () => {
       status, priority, areas: areas.slice(),
       subcategories: {}, subtaskGroups: {},
       assignee, dueDate,
+      parentId: '', blockedBy: [], archived: false,
       created: now, updated: now
     });
   });
@@ -3570,6 +3919,32 @@ function openLinkModal(linkId) {
 }
 
 document.getElementById('link-add-btn').addEventListener('click', () => openLinkModal());
+
+document.getElementById('link-export-btn').addEventListener('click', () => {
+  const proj = P();
+  const links = proj.links || [];
+  if (!links.length) {
+    openConfirm('Nothing to export', 'This project has no links yet. Add some first.', 'OK', () => {});
+    document.getElementById('cm-confirm').className = 'btn primary';
+    return;
+  }
+  const payload = {
+    kind: 'kanban-links-export',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    project: { id: proj.id, name: proj.name },
+    links: links
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const slug = (proj.name || 'project').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
+  const stamp = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = 'links-' + slug + '-' + stamp + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
 
 document.getElementById('le-save').addEventListener('click', () => {
   const url = document.getElementById('le-url').value.trim();
