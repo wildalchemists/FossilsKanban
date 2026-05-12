@@ -1323,14 +1323,241 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 
 /* ============================================================
-   RESPONSIVE — board scrolls; topbar wraps
+   RESPONSIVE — phone / tablet / desktop
    ============================================================ */
+
+/* By default, the mobile-only items in menus are hidden */
+.mobile-only { display: none !important; }
+
+/* Touch-drag: card being long-press-dragged on touch device */
+.card.touch-dragging {
+  position: fixed !important;
+  z-index: 9999;
+  opacity: 0.92;
+  box-shadow: var(--shadow-drag);
+  pointer-events: none;
+  cursor: grabbing;
+  transform: rotate(-1deg);
+}
+.column-body.touch-drop-target {
+  background: rgba(183, 144, 60, 0.10);
+  outline: 2px dashed var(--gold);
+  outline-offset: -4px;
+}
+
+/* ---------- Tablet (≤ 980px): make topbar tighter ---------- */
+@media (max-width: 980px) {
+  .brand { font-size: 16px; letter-spacing: 1.5px; }
+  .topbar { gap: 10px; padding: 12px 16px; }
+  .project-select { min-width: 140px; font-size: 14px; }
+  .project-picker label { display: none; }
+  .btn { padding: 6px 10px; font-size: 12px; }
+  .btn.icon-only { padding: 6px 8px; }
+}
+
+/* ---------- Mobile (≤ 720px) ---------- */
 @media (max-width: 720px) {
-  .topbar { flex-wrap: wrap; padding: 10px 14px; }
-  .project-picker { padding-left: 0; border-left: none; margin-left: 0; width: 100%; }
-  .brand { font-size: 16px; }
-  .modal { width: calc(100vw - 20px); }
-  .field-row { grid-template-columns: 1fr; }
+  /* Topbar collapses: brand + sync dot + project + Add card + ⋯ menu */
+  .topbar {
+    flex-wrap: nowrap;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .topbar::after { display: none; }
+  .brand {
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+  .brand::before { font-size: 16px; }
+  #sync-label { display: none; }            /* show only the colored dot */
+  .sync-indicator { padding: 4px 6px; }
+  .project-picker {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-left: 8px;
+    border-left: 1px solid var(--border);
+    margin-left: 4px;
+  }
+  .project-select {
+    width: 100%;
+    min-width: 0;
+    font-size: 13px;
+    padding: 6px 22px 6px 8px;
+  }
+  .spacer { display: none; }                /* let Add card sit right after picker */
+
+  /* Hide the four extras, expose them via the ⋯ menu */
+  .topbar-extra { display: none !important; }
+  .mobile-only { display: flex !important; }
+  #add-btn {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+  #add-btn::before { content: '＋'; }
+  #add-btn { font-size: 0; }
+  #add-btn::before { font-size: 16px; line-height: 1; }
+  .btn.primary#add-btn {
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  #more-menu-btn { font-size: 16px; }
+
+  /* Tab strip — keep but shrink */
+  .tab-strip { padding: 6px 12px; gap: 4px; }
+  .tab { padding: 6px 12px; font-size: 10px; letter-spacing: 1px; }
+  .archive-toggle {
+    font-size: 9px;
+    letter-spacing: .5px;
+    padding: 4px 8px;
+  }
+  /* Hide the count suffix on archive toggle — too noisy on mobile */
+
+  /* Filter banner */
+  .filter-banner { padding: 6px 12px; font-size: 11px; }
+
+  /* Board */
+  .board {
+    padding: 12px 8px 80px;        /* extra bottom padding so the FAB hint doesn't cover cards */
+    gap: 10px;
+    /* Snap each column to view for a phone-feel scroll */
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .column {
+    flex: 0 0 86vw;                /* one column nearly fills the viewport */
+    max-width: 320px;
+    scroll-snap-align: start;
+  }
+  .column-header { padding: 10px 12px 8px; }
+  .column-title h2 { font-size: 12px; letter-spacing: 1.5px; }
+  .column-body { padding: 12px 8px 8px; gap: 8px; }
+  .column-footer { padding: 4px 6px 8px; }
+
+  /* Card density */
+  .card {
+    padding: 10px 11px 9px;
+  }
+  .card-title { font-size: 13px; }
+  .card-meta { font-size: 10px; }
+  .card-desc { font-size: 11px; }
+  .card-progress { font-size: 9px; }
+
+  /* Links view */
+  .links-toolbar {
+    flex-wrap: wrap;
+    padding: 12px 12px 8px;
+    gap: 8px;
+  }
+  .links-toolbar h2 { font-size: 12px; }
+  .links-toolbar .count { font-size: 10px; }
+  .tag-filter-chips {
+    width: 100%;
+    order: 3;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+  }
+  .tag-filter-chips::-webkit-scrollbar { display: none; }
+  .links-grid {
+    padding: 0 12px 16px;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  /* Modals: nearly full screen on mobile */
+  .modal-overlay { align-items: flex-end; }   /* bottom-sheet style */
+  .modal {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    max-height: 92vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    animation: modal-in-sheet 240ms cubic-bezier(.2,.8,.3,1);
+  }
+  .modal.wide,
+  .modal.search-modal {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin: 0 !important;
+    align-self: stretch;
+  }
+  @keyframes modal-in-sheet {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .modal-header { padding: 14px 18px 6px; }
+  .modal-header h2 { font-size: 15px; letter-spacing: 1.5px; }
+  .modal-header::after { left: 18px; }
+  .modal-body { padding: 14px 18px 6px; gap: 10px; }
+  .modal-footer { padding: 12px 18px 14px; flex-wrap: wrap; gap: 6px; }
+  .modal-footer .btn { font-size: 12px; }
+  .field-row { grid-template-columns: 1fr; gap: 10px; }
+
+  /* iOS auto-zooms inputs smaller than 16px on focus — prevent that */
+  .field input[type="text"],
+  .field input[type="date"],
+  .field input[type="number"],
+  .field textarea,
+  .field select,
+  .search-input-wrap input,
+  #pm-name {
+    font-size: 16px !important;
+  }
+
+  /* Settings dialog grids: stack the columns */
+  .settings-grid-status,
+  .settings-grid-priority {
+    grid-template-columns: 1fr 60px 28px;
+    gap: 4px;
+  }
+  .settings-grid-area {
+    grid-template-columns: 1fr 50px 60px 28px;
+    gap: 4px;
+  }
+  .settings-grid-area input[data-bind="subcategories"] {
+    grid-column: 1 / -1;            /* subcategories on its own row */
+  }
+
+  /* Subcat block: stack label above chips */
+  .subcat-block {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  /* Search: full-width, top-aligned */
+  .search-modal { margin-top: 0; }
+  .search-results { max-height: 65vh; }
+  .search-hint { font-size: 10px; gap: 8px; }
+
+  /* Hide the floating shortcut hint on mobile — keyboard shortcuts aren't a thing */
+  .kbd-hint-fab { display: none; }
+
+  /* Bigger tap targets on chips */
+  .chip { padding: 7px 14px; font-size: 12px; }
+  .sub-chip { padding: 5px 11px; font-size: 11px; }
+
+  /* Subtask rows: bigger checkboxes + text */
+  .subtask-row input[type="checkbox"] { width: 18px; height: 18px; }
+  .subtask-row input[type="text"] { padding: 6px 8px; }
+  .subtask-del { padding: 4px 10px; }
+}
+
+/* ---------- Very narrow phones (≤ 380px) — final squeeze ---------- */
+@media (max-width: 380px) {
+  .brand { font-size: 0; }                  /* hide brand text, keep ⚜ icon */
+  .brand::before { font-size: 18px; }
+  .topbar { padding: 8px 10px; gap: 6px; }
+  .column { flex: 0 0 88vw; }
+}
+
+/* ---------- Touch device — show drag hint on first board view ---------- */
+@media (hover: none) and (pointer: coarse) {
+  .card { cursor: pointer; }                /* drag isn't the default action on touch */
+  .card:hover { transform: none; }          /* no hover lift on touch */
 }
 </style>
 </head>
@@ -1361,15 +1588,20 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
     <div class="spacer"></div>
 
-    <button class="btn" id="filter-btn">⊕ Filter</button>
-    <button class="btn" id="goals-btn">🎯 Goals</button>
+    <button class="btn topbar-extra" id="filter-btn">⊕ Filter</button>
+    <button class="btn topbar-extra" id="goals-btn">🎯 Goals</button>
     <button class="btn primary" id="add-btn">＋ Add card</button>
-    <button class="btn icon-only" id="quick-add-btn" title="Quick add">📥</button>
-    <button class="btn icon-only" id="settings-btn" title="Settings">⚙</button>
+    <button class="btn icon-only topbar-extra" id="quick-add-btn" title="Quick add">📥</button>
+    <button class="btn icon-only topbar-extra" id="settings-btn" title="Settings">⚙</button>
 
     <div class="menu-wrap">
       <button class="btn icon-only ghost" id="more-menu-btn" title="More">⋯</button>
       <div class="menu-pop" id="more-menu">
+        <button data-act="open-filter" class="mobile-only">⊕ Filter</button>
+        <button data-act="open-goals" class="mobile-only">🎯 Goals</button>
+        <button data-act="open-quick-add" class="mobile-only">📥 Quick add</button>
+        <button data-act="open-settings" class="mobile-only">⚙ Settings</button>
+        <hr class="mobile-only">
         <button data-act="export">⬇ Export JSON</button>
         <button data-act="import">⬆ Import JSON</button>
         <hr>
@@ -1772,9 +2004,9 @@ const SYNC_CONFIG = {
     storageBucket:     "fossilskanban.firebasestorage.app",
     messagingSenderId: "301814722359",
     appId:             "1:301814722359:web:110b58037e9e28acce34b2",
-    measurementId: "G-BXG5DMRV46"
+    measurementId:     "G-BXG5DMRV46"
   },
-  boardId: 'hot-potato'
+  boardId: 'fossils-kanban'  // change per page (e.g. 'hot-potato', 'fossil-records')
 };
 
 const SYNC = {
@@ -1789,7 +2021,7 @@ const SYNC = {
 
 const DEFAULT_SETTINGS = () => ({
   statuses: ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'],
-  priorities: ['Low', 'Medium', 'High', 'Urgent'],
+  priorities: ['Urgent', 'High', 'Medium', 'Low'],
   areas: ['Design', 'Art', 'Programming'],
   statusColors: {
     'Backlog':     '#E8E1D0',
@@ -1964,6 +2196,16 @@ function relDate(iso) {
 }
 
 function uniq(arr) { return Array.from(new Set(arr)); }
+
+/** Default priority for new cards: prefer "Medium" if it exists, otherwise the
+ *  middle of the priorities list (so it works no matter how the user orders them). */
+function defaultPriority() {
+  const ps = S().priorities;
+  if (!ps || !ps.length) return '';
+  const med = ps.find(p => p.toLowerCase() === 'medium');
+  if (med) return med;
+  return ps[Math.floor(ps.length / 2)];
+}
 
 function debounce(fn, ms) {
   let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
@@ -2171,6 +2413,7 @@ let dragCardId = null;
 
 function setupDragDrop() {
   document.querySelectorAll('.card').forEach(card => {
+    // Desktop drag
     card.addEventListener('dragstart', (e) => {
       dragCardId = card.dataset.cardId;
       card.classList.add('dragging');
@@ -2184,6 +2427,9 @@ function setupDragDrop() {
       setTimeout(() => { card.dataset.justDragged = ''; }, 50);
       dragCardId = null;
     });
+
+    // Touch drag (long-press to start)
+    attachTouchDrag(card);
   });
 
   document.querySelectorAll('.column-body').forEach(body => {
@@ -2211,6 +2457,119 @@ function setupDragDrop() {
       }
     });
   });
+}
+
+/* ============================================================
+   TOUCH DRAG — long-press a card to start dragging on touchscreens
+   ============================================================ */
+function attachTouchDrag(card) {
+  let longPressTimer = null;
+  let dragging = false;
+  let startX = 0, startY = 0;
+  let offsetX = 0, offsetY = 0;
+  let originalParent = null;
+  let originalNext = null;
+  let lastDropTarget = null;
+  const LONG_PRESS_MS = 380;
+  const MOVE_THRESHOLD = 8;  // px — taps under this won't cancel the press
+
+  const cleanup = () => {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+    if (dragging) {
+      card.classList.remove('touch-dragging');
+      card.style.left = '';
+      card.style.top  = '';
+      card.style.width = '';
+      // Re-insert into original location so renderBoard doesn't crash on a detached node
+      if (originalParent) {
+        try { originalParent.insertBefore(card, originalNext); } catch (_) {}
+      }
+    }
+    if (lastDropTarget) lastDropTarget.classList.remove('touch-drop-target');
+    document.querySelectorAll('.column-body.touch-drop-target')
+      .forEach(b => b.classList.remove('touch-drop-target'));
+    document.body.style.overflow = '';
+    dragging = false;
+    lastDropTarget = null;
+  };
+
+  card.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY;
+    longPressTimer = setTimeout(() => {
+      // Start drag
+      dragging = true;
+      const rect = card.getBoundingClientRect();
+      offsetX = t.clientX - rect.left;
+      offsetY = t.clientY - rect.top;
+      originalParent = card.parentElement;
+      originalNext = card.nextSibling;
+      card.style.width = rect.width + 'px';
+      card.style.left = (t.clientX - offsetX) + 'px';
+      card.style.top  = (t.clientY - offsetY) + 'px';
+      card.classList.add('touch-dragging');
+      document.body.style.overflow = 'hidden';
+      // Haptic feedback if supported
+      if (navigator.vibrate) navigator.vibrate(15);
+    }, LONG_PRESS_MS);
+  }, { passive: true });
+
+  card.addEventListener('touchmove', (e) => {
+    if (!e.touches.length) return;
+    const t = e.touches[0];
+    if (!dragging) {
+      // If the finger moved before long-press fired, cancel — treat as scroll
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      if (Math.hypot(dx, dy) > MOVE_THRESHOLD) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      return;
+    }
+    e.preventDefault();
+    card.style.left = (t.clientX - offsetX) + 'px';
+    card.style.top  = (t.clientY - offsetY) + 'px';
+
+    // Find the column-body under the finger
+    const el = document.elementFromPoint(t.clientX, t.clientY);
+    const body = el ? el.closest('.column-body') : null;
+    if (body !== lastDropTarget) {
+      if (lastDropTarget) lastDropTarget.classList.remove('touch-drop-target');
+      if (body) body.classList.add('touch-drop-target');
+      lastDropTarget = body;
+    }
+  }, { passive: false });
+
+  card.addEventListener('touchend', (e) => {
+    if (!dragging) {
+      clearTimeout(longPressTimer);
+      return;
+    }
+    // Find final drop target via the last touch coords
+    const t = (e.changedTouches && e.changedTouches[0]) || null;
+    const dropEl = t ? document.elementFromPoint(t.clientX, t.clientY) : null;
+    const body = dropEl ? dropEl.closest('.column-body') : null;
+    cleanup();
+    if (body) {
+      const newStatus = body.closest('.column').dataset.status;
+      const task = P().tasks.find(x => x.id === card.dataset.cardId);
+      if (task && task.status !== newStatus) {
+        task.status = newStatus;
+        task.updated = new Date().toISOString();
+        saveSoon();
+        renderBoard();
+        renderProjectPicker();
+      }
+    }
+    // Suppress the trailing click so it doesn't open the editor
+    card.dataset.justDragged = '1';
+    setTimeout(() => { card.dataset.justDragged = ''; }, 350);
+  });
+
+  card.addEventListener('touchcancel', cleanup);
 }
 
 /* ============================================================
@@ -2250,7 +2609,7 @@ function newDraftCard(defaults) {
     title: '',
     descriptionText: '',
     status: S().statuses[0],
-    priority: S().priorities[1] || S().priorities[0],
+    priority: defaultPriority(),
     areas: [],
     subcategories: {},
     subtaskGroups: {},
@@ -2503,7 +2862,7 @@ function openQuickAdd() {
   document.getElementById('qa-msg').textContent = '';
   document.getElementById('qa-status').innerHTML = settings.statuses.map(s => `<option>${esc(s)}</option>`).join('');
   document.getElementById('qa-priority').innerHTML = settings.priorities.map(p =>
-    `<option ${p === (settings.priorities[1] || settings.priorities[0]) ? 'selected' : ''}>${esc(p)}</option>`).join('');
+    `<option ${p === defaultPriority() ? 'selected' : ''}>${esc(p)}</option>`).join('');
 
   const areaEl = document.getElementById('qa-areas');
   areaEl.innerHTML = settings.areas.map(a => {
@@ -3045,6 +3404,10 @@ document.getElementById('more-menu').addEventListener('click', (e) => {
   if (!act) return;
   if (act === 'export') exportJson();
   else if (act === 'import') document.getElementById('import-file').click();
+  else if (act === 'open-filter')    openFilter();
+  else if (act === 'open-goals')     openGoals();
+  else if (act === 'open-quick-add') openQuickAdd();
+  else if (act === 'open-settings')  openSettings();
   else if (act === 'about') {
     openConfirm(
       'About this Kanban',
@@ -3546,8 +3909,14 @@ moreMenu.addEventListener('click', (e) => {
 /* ============================================================
    FIREBASE SYNC — load SDK on demand, listen + push
    ============================================================ */
-const FIREBASE_VERSION = '10.13.0';
-const FIREBASE_CDN = 'https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION;
+const FIREBASE_VERSION = '12.13.0';
+// Fallback chain — try each CDN in order. Some networks / extensions block one
+// or two of these, so we keep multiple options.
+const FIREBASE_CDNS = [
+  'https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION,
+  'https://cdn.jsdelivr.net/npm/firebase@' + FIREBASE_VERSION + '/compat',
+  'https://cdnjs.cloudflare.com/ajax/libs/firebase/' + FIREBASE_VERSION
+];
 
 function setSyncStatus(status, errorMsg) {
   SYNC.status = status;
@@ -3574,20 +3943,47 @@ function renderSyncIndicator() {
     : (m.text + ' · Click for setup help');
 }
 
+/** Load a script from one of the CDNs in our fallback list.
+ *  Tries each in order; resolves on first success, rejects only if all fail. */
+function loadScriptWithFallback(filenames) {
+  const tryOne = (cdnIdx) => new Promise((res, rej) => {
+    if (cdnIdx >= FIREBASE_CDNS.length) {
+      rej(new Error('All CDNs failed for ' + filenames.join(', ')));
+      return;
+    }
+    const cdn = FIREBASE_CDNS[cdnIdx];
+    const file = filenames[Math.min(cdnIdx, filenames.length - 1)];
+    const url = cdn + '/' + file;
+    const s = document.createElement('script');
+    s.src = url;
+    s.crossOrigin = 'anonymous';
+    s.onload = res;
+    s.onerror = () => {
+      console.warn('[sync] Failed:', url, '— trying next CDN');
+      tryOne(cdnIdx + 1).then(res, rej);
+    };
+    document.head.appendChild(s);
+  });
+  return tryOne(0);
+}
+
 function loadFirebaseSDK() {
   return new Promise((resolve, reject) => {
     if (typeof firebase !== 'undefined' && firebase.firestore) { resolve(); return; }
-    const loadScript = (src) => new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = res;
-      s.onerror = () => rej(new Error('Failed to load ' + src));
-      document.head.appendChild(s);
-    });
-    loadScript(FIREBASE_CDN + '/firebase-app-compat.js')
-      .then(() => loadScript(FIREBASE_CDN + '/firebase-firestore-compat.js'))
+    loadScriptWithFallback(['firebase-app-compat.js'])
+      .then(() => loadScriptWithFallback(['firebase-firestore-compat.js']))
       .then(resolve)
-      .catch(reject);
+      .catch(err => {
+        // Add a friendlier hint to the error
+        const helpMsg = (
+          'Could not load the Firebase SDK from any CDN. ' +
+          'Common causes: (1) a browser extension blocking google/cloudflare scripts ' +
+          '(uBlock, Privacy Badger, etc.), (2) the file is being opened from your computer ' +
+          'as file:// — try via http://localhost or a live server, ' +
+          '(3) your network blocks gstatic.com/jsdelivr.net/cdnjs.cloudflare.com.'
+        );
+        reject(new Error(helpMsg));
+      });
   });
 }
 
