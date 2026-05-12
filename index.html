@@ -1287,6 +1287,42 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .archive-toggle.on { background: var(--gold-faint); color: var(--ink); border-color: var(--gold); }
 
 /* ============================================================
+   SYNC INDICATOR
+   ============================================================ */
+.sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .3px;
+  color: var(--ink-faint);
+  cursor: help;
+  user-select: none;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .35);
+  border: 1px solid var(--border-faint);
+  white-space: nowrap;
+}
+.sync-indicator.online { color: var(--good); }
+.sync-indicator.connecting { color: var(--warn); }
+.sync-indicator.error { color: var(--danger); }
+.sync-indicator .dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.sync-indicator.connecting .dot {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .3; }
+}
+
+/* ============================================================
    RESPONSIVE — board scrolls; topbar wraps
    ============================================================ */
 @media (max-width: 720px) {
@@ -1305,6 +1341,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   <!-- ====================================================== TOPBAR ====================================================== -->
   <header class="topbar">
     <div class="brand">Kanban</div>
+    <span class="sync-indicator" id="sync-indicator" title="Sync status (click for setup)">
+      <span class="dot"></span><span id="sync-label">Offline</span>
+    </span>
     <div class="project-picker">
       <label>Quest</label>
       <select class="project-select" id="project-select"></select>
@@ -1660,6 +1699,45 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   </div>
 </div>
 
+<!-- Sync setup help -->
+<div class="modal-overlay" id="sync-modal">
+  <div class="modal wide">
+    <div class="modal-header">
+      <h2>Team sync</h2>
+      <span class="sub" id="sync-modal-status"></span>
+    </div>
+    <div class="modal-body">
+      <p class="hint" id="sync-modal-intro">Firebase Firestore enables real-time sync across your team. Setup takes ~10 minutes.</p>
+      <div id="sync-modal-body">
+        <ol style="line-height:1.6;font-size:13px;color:var(--ink);padding-left:20px;margin:0;">
+          <li>Go to <a href="https://console.firebase.google.com/" target="_blank" rel="noopener" style="color:var(--accent);">console.firebase.google.com</a> and create a new project (free; no credit card needed).</li>
+          <li>Inside the project, click <strong>Build → Firestore Database → Create database → Start in test mode</strong> (any region).</li>
+          <li>Click the gear icon ⚙ → <strong>Project settings</strong> → scroll to <strong>Your apps</strong> → click <code style="font-family:var(--mono);background:var(--parchment-2);padding:1px 5px;border-radius:3px;">&lt;/&gt;</code> (Web app icon) → register the app (any name).</li>
+          <li>You'll see a <code style="font-family:var(--mono);background:var(--parchment-2);padding:1px 5px;border-radius:3px;">firebaseConfig</code> object with your keys. Copy the whole block.</li>
+          <li>Open <strong>this HTML file</strong> in a text editor and find this near the top of the &lt;script&gt; section:
+            <pre style="background:var(--parchment-2);padding:10px 12px;border-radius:var(--radius-sm);font-family:var(--mono);font-size:12px;margin:8px 0;overflow-x:auto;border:1px solid var(--border-faint);">const SYNC_CONFIG = {
+  enabled: false,
+  firebase: { apiKey: "...", ... },
+  boardId: 'default-board'
+};</pre>
+          </li>
+          <li>Set <code style="font-family:var(--mono);background:var(--parchment-2);padding:1px 5px;border-radius:3px;">enabled: true</code>, paste the firebaseConfig values, and choose a <code style="font-family:var(--mono);background:var(--parchment-2);padding:1px 5px;border-radius:3px;">boardId</code> (e.g. <code>'hot-potato'</code>). The boardId determines which document your team shares — anyone with the same file gets the same board.</li>
+          <li>Save the file, push to GitHub, share the URL. Done.</li>
+        </ol>
+        <p class="hint" style="margin-top:14px;">
+          ⚠ <strong>Note on access</strong>: in "test mode" anyone with the URL and Firebase project ID can read/write. That's fine for a private team URL but not for a public link. To lock down later, configure Firestore Security Rules in the Firebase console.
+        </p>
+        <p class="hint" style="margin-top:10px;">
+          🔓 <strong>Free tier limits</strong>: 50k reads/day, 20k writes/day, 1 GB stored. A 10-person team typing all day uses ~1-2% of any of these.
+        </p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn primary" data-close>Got it</button>
+    </div>
+  </div>
+</div>
+
 <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
 
 <script>
@@ -1674,6 +1752,40 @@ const STORAGE_KEY = (() => {
   return 'kanban-quest-board' + (file && file !== 'index' ? ':' + file : '');
 })();
 const SCHEMA_VERSION = 1;
+
+/* ============================================================
+   SYNC CONFIG — edit this block to enable team sync
+   ============================================================
+   STEPS:
+   1. Create a free Firebase project at console.firebase.google.com
+   2. Enable Firestore (Build → Firestore → Create database → Test mode)
+   3. Project settings → Your apps → Web app → copy firebaseConfig
+   4. Paste the values below and set `enabled: true`
+   5. Pick a `boardId` — any string; this is the doc your team shares
+   ============================================================ */
+const SYNC_CONFIG = {
+  enabled: true,
+  firebase: {
+    apiKey:            "AIzaSyCVU-tu-eK6tJrbNb1VMqn3qYH2wRsNu7I",
+    authDomain:        "fossilskanban.firebaseapp.com",
+    projectId:         "fossilskanban",
+    storageBucket:     "fossilskanban.firebasestorage.app",
+    messagingSenderId: "301814722359",
+    appId:             "1:301814722359:web:110b58037e9e28acce34b2",
+    measurementId: "G-BXG5DMRV46"
+  },
+  boardId: 'hot-potato'
+};
+
+const SYNC = {
+  enabled: false,
+  status: 'offline',          // 'offline' | 'connecting' | 'online' | 'error'
+  errorMsg: '',
+  clientId: 'c_' + Math.random().toString(36).slice(2, 10),
+  docRef: null,
+  unsubscribe: null,
+  pendingWrites: 0
+};
 
 const DEFAULT_SETTINGS = () => ({
   statuses: ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'],
@@ -1770,6 +1882,8 @@ function saveState() {
     console.error('Failed to save state:', e);
     alert('Could not save to localStorage. Storage may be full or disabled.');
   }
+  // Mirror to Firestore if sync is enabled (debounced)
+  if (SYNC.enabled && typeof pushToFirestoreSoon === 'function') pushToFirestoreSoon();
 }
 
 function P() { return STATE.projects[STATE.activeProjectId]; }   // Active project shortcut
@@ -3430,6 +3544,211 @@ moreMenu.addEventListener('click', (e) => {
 });
 
 /* ============================================================
+   FIREBASE SYNC — load SDK on demand, listen + push
+   ============================================================ */
+const FIREBASE_VERSION = '10.13.0';
+const FIREBASE_CDN = 'https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION;
+
+function setSyncStatus(status, errorMsg) {
+  SYNC.status = status;
+  SYNC.errorMsg = errorMsg || '';
+  renderSyncIndicator();
+}
+
+function renderSyncIndicator() {
+  const el = document.getElementById('sync-indicator');
+  const label = document.getElementById('sync-label');
+  if (!el || !label) return;
+  el.classList.remove('online', 'connecting', 'error');
+  const map = {
+    offline:    { cls: '',           text: 'Offline (local only)' },
+    connecting: { cls: 'connecting', text: 'Syncing…' },
+    online:     { cls: 'online',     text: 'Synced' },
+    error:      { cls: 'error',      text: 'Sync error' }
+  };
+  const m = map[SYNC.status] || map.offline;
+  if (m.cls) el.classList.add(m.cls);
+  label.textContent = m.text;
+  el.title = SYNC.errorMsg
+    ? (m.text + ' — ' + SYNC.errorMsg + '\n\nClick for setup help.')
+    : (m.text + ' · Click for setup help');
+}
+
+function loadFirebaseSDK() {
+  return new Promise((resolve, reject) => {
+    if (typeof firebase !== 'undefined' && firebase.firestore) { resolve(); return; }
+    const loadScript = (src) => new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = res;
+      s.onerror = () => rej(new Error('Failed to load ' + src));
+      document.head.appendChild(s);
+    });
+    loadScript(FIREBASE_CDN + '/firebase-app-compat.js')
+      .then(() => loadScript(FIREBASE_CDN + '/firebase-firestore-compat.js'))
+      .then(resolve)
+      .catch(reject);
+  });
+}
+
+/** Strip per-user UI fields before pushing — teammates shouldn't yank each other's
+ *  active project, filter, or current view. */
+function getSyncableState() {
+  const out = JSON.parse(JSON.stringify(STATE));
+  delete out.activeProjectId;
+  delete out.myName;
+  Object.values(out.projects || {}).forEach(p => {
+    delete p.filter;
+    delete p.activeView;
+    delete p.showArchived;
+    delete p.linkTagFilter;
+  });
+  return out;
+}
+
+/** Merge a remote sync payload into STATE, preserving local UI state. */
+function applyRemoteState(remote) {
+  if (!remote || !remote.projects) return;
+  // For each remote project, merge with local (keeping local UI fields)
+  Object.entries(remote.projects).forEach(([pid, rp]) => {
+    const lp = STATE.projects[pid];
+    const merged = JSON.parse(JSON.stringify(rp));
+    if (lp) {
+      merged.filter        = lp.filter        || { area: '', myCardsOnly: false };
+      merged.activeView    = lp.activeView    || 'kanban';
+      merged.showArchived  = !!lp.showArchived;
+      merged.linkTagFilter = lp.linkTagFilter || '';
+    } else {
+      merged.filter        = { area: '', myCardsOnly: false };
+      merged.activeView    = 'kanban';
+      merged.showArchived  = false;
+      merged.linkTagFilter = '';
+    }
+    STATE.projects[pid] = merged;
+  });
+  // Drop projects that no longer exist remotely
+  Object.keys(STATE.projects).forEach(pid => {
+    if (!remote.projects[pid]) delete STATE.projects[pid];
+  });
+  // If our active project was deleted, fall back to first available (or recreate one)
+  if (!STATE.projects[STATE.activeProjectId]) {
+    const ids = Object.keys(STATE.projects);
+    if (ids.length) {
+      STATE.activeProjectId = ids[0];
+    } else {
+      const proj = DEFAULT_PROJECT('New Quest');
+      STATE.projects[proj.id] = proj;
+      STATE.activeProjectId = proj.id;
+    }
+  }
+  // Mirror to localStorage as offline backup
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE)); } catch (e) {}
+}
+
+function pushToFirestore() {
+  if (!SYNC.enabled || !SYNC.docRef) return;
+  SYNC.pendingWrites++;
+  if (SYNC.status === 'online') setSyncStatus('connecting');
+  SYNC.docRef.set({
+    state:    getSyncableState(),
+    clientId: SYNC.clientId,
+    updated:  new Date().toISOString()
+  })
+    .then(() => {
+      SYNC.pendingWrites = Math.max(0, SYNC.pendingWrites - 1);
+      if (SYNC.pendingWrites === 0) setSyncStatus('online');
+    })
+    .catch(err => {
+      console.error('Firestore write error:', err);
+      setSyncStatus('error', err.message || 'write failed');
+    });
+}
+
+let pushToFirestoreSoon = function () { /* no-op until sync inits */ };
+
+function renderAll() {
+  renderProjectPicker();
+  if (P().activeView === 'links') renderLinks();
+  else renderBoard();
+}
+
+function initSync() {
+  if (!SYNC_CONFIG.enabled) {
+    setSyncStatus('offline');
+    return;
+  }
+  setSyncStatus('connecting');
+  loadFirebaseSDK()
+    .then(() => {
+      try {
+        firebase.initializeApp(SYNC_CONFIG.firebase);
+      } catch (e) {
+        // Already initialized — fine, e.g. after a hot reload
+        if (!/already exists/.test(String(e))) throw e;
+      }
+      const db = firebase.firestore();
+      SYNC.docRef = db.collection('boards').doc(SYNC_CONFIG.boardId);
+      SYNC.enabled = true;
+      pushToFirestoreSoon = debounce(pushToFirestore, 400);
+
+      SYNC.unsubscribe = SYNC.docRef.onSnapshot(snap => {
+        if (!snap.exists) {
+          // First time on this board — push local state up so the doc exists
+          pushToFirestore();
+          setSyncStatus('online');
+          return;
+        }
+        const data = snap.data();
+        // Skip our own writes echoing back
+        if (data && data.clientId === SYNC.clientId) {
+          if (SYNC.pendingWrites === 0) setSyncStatus('online');
+          return;
+        }
+        if (data && data.state) {
+          applyRemoteState(data.state);
+          // Don't disrupt user mid-edit; if a modal is open, defer re-render
+          if (!document.querySelector('.modal-overlay.open')) renderAll();
+          else renderProjectPicker(); // safe to update the dropdown
+        }
+        setSyncStatus('online');
+      }, err => {
+        console.error('Firestore listener error:', err);
+        setSyncStatus('error', err.message || 'listener failed');
+      });
+    })
+    .catch(err => {
+      console.error('Sync init failed:', err);
+      setSyncStatus('error', err.message || 'init failed');
+    });
+}
+
+// Clicking the sync indicator opens the setup help dialog
+document.getElementById('sync-indicator').addEventListener('click', () => {
+  const note = SYNC_CONFIG.enabled
+    ? 'Sync is enabled. Current status: ' + SYNC.status + (SYNC.errorMsg ? ' (' + SYNC.errorMsg + ')' : '') + '. Board ID: ' + SYNC_CONFIG.boardId
+    : 'Sync is currently off. Follow the steps below to turn it on.';
+  document.getElementById('sync-modal-status').textContent = SYNC_CONFIG.enabled
+    ? ('Board: ' + SYNC_CONFIG.boardId + ' · ' + SYNC.status)
+    : 'currently off';
+  document.getElementById('sync-modal-intro').textContent = note;
+  openModal('sync-modal');
+});
+
+// Add "Sync setup" to the more menu
+const _moreMenu = document.getElementById('more-menu');
+const syncBtn = document.createElement('button');
+syncBtn.dataset.act = 'sync-setup';
+syncBtn.textContent = '⇄ Team sync setup…';
+const hrSync = document.createElement('hr');
+_moreMenu.insertBefore(hrSync, _moreMenu.firstChild);
+_moreMenu.insertBefore(syncBtn, _moreMenu.firstChild);
+_moreMenu.addEventListener('click', (e) => {
+  if (e.target.closest('[data-act]')?.dataset.act === 'sync-setup') {
+    document.getElementById('sync-indicator').click();
+  }
+});
+
+/* ============================================================
    INIT
    ============================================================ */
 function init() {
@@ -3444,6 +3763,8 @@ function init() {
     const t = P().tasks.find(x => x.id === cardFromUrl);
     if (t) setTimeout(() => openCardModal(cardFromUrl), 100);
   }
+  // Initialize Firebase sync if configured
+  initSync();
 }
 init();
 
